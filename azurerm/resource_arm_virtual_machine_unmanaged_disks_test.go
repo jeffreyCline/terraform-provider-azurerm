@@ -62,6 +62,25 @@ func TestAccAzureRMVirtualMachine_basicLinuxMachine_storageBlob_attach(t *testin
 	})
 }
 
+func TestAccAzureRMVirtualMachine_basicLinuxMachineSSHOnlyManagedDisk(t *testing.T) {
+	var vm compute.VirtualMachine
+	ri := acctest.RandInt()
+	config := testAccAzureRMVirtualMachine_basicLinuxMachineSSHOnlyManagedDisk(ri, "eastus")
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testCheckAzureRMVirtualMachineDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					testCheckAzureRMVirtualMachineExists("azurerm_virtual_machine.test", &vm),
+				),
+			},
+		},
+	})
+}
+
 func TestAccAzureRMVirtualMachine_basicLinuxMachineSSHOnly(t *testing.T) {
 	var vm compute.VirtualMachine
 	ri := acctest.RandInt()
@@ -907,6 +926,120 @@ resource "azurerm_virtual_machine" "test" {
 		disable_password_authentication = true
 		ssh_keys {
             path = "/home/testadmin/.ssh/authorized_keys"
+            key_data = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCfGyt5W1eJVpDIxlyvAWO594j/azEGohmlxYe7mgSfmUCWjuzILI6nHuHbxhpBDIZJhQ+JAeduXpii61dmThbI89ghGMhzea0OlT3p12e093zqa4goB9g40jdNKmJArER3pMVqs6hmv8y3GlUNkMDSmuoyI8AYzX4n26cUKZbwXQ== mk@mk3"
+        }
+    }
+
+    tags {
+    	environment = "Production"
+    	cost-center = "Ops"
+    }
+}
+`, rInt, location, rInt, rInt, rInt, rInt, rInt, rInt)
+}
+
+func testAccAzureRMVirtualMachine_basicLinuxMachineSSHOnlyManagedDisk(rInt int, location string) string {
+	return fmt.Sprintf(`
+resource "azurerm_resource_group" "test" {
+    name = "acctestRG-%d"
+    location = "%s"
+}
+
+resource "azurerm_virtual_network" "test" {
+    name = "acctvn-%d"
+    address_space = ["10.0.0.0/16"]
+    location = "${azurerm_resource_group.test.location}"
+    resource_group_name = "${azurerm_resource_group.test.name}"
+}
+
+resource "azurerm_subnet" "test" {
+    name = "acctsub-%d"
+    resource_group_name = "${azurerm_resource_group.test.name}"
+    virtual_network_name = "${azurerm_virtual_network.test.name}"
+    address_prefix = "10.0.2.0/24"
+}
+
+resource "azurerm_public_ip" "test" {
+    name                         = "pip%d"
+    location                     = "${azurerm_resource_group.test.location}"
+    resource_group_name          = "${azurerm_resource_group.test.name}"
+    public_ip_address_allocation = "dynamic"
+}
+
+resource "azurerm_network_security_group" "test" {
+    name                = "nsg-%d"
+    location            = "${azurerm_resource_group.test.location}"
+    resource_group_name = "${azurerm_resource_group.test.name}"
+
+    security_rule {
+        name                       = "SSH"
+        priority                   = 1001
+        direction                  = "Inbound"
+        access                     = "Allow"
+        protocol                   = "Tcp"
+        source_port_range          = "*"
+        destination_port_range     = "22"
+        source_address_prefix      = "*"
+        destination_address_prefix = "*"
+    }
+}
+
+resource "azurerm_network_interface" "test" {
+    name                      = "acctni-%d"
+    location                  = "${azurerm_resource_group.test.location}"
+    resource_group_name       = "${azurerm_resource_group.test.name}"
+    network_security_group_id = "${azurerm_network_security_group.test.id}"
+
+    ip_configuration {
+    	name                          = "testconfiguration1"
+    	subnet_id                     = "${azurerm_subnet.test.id}"
+        private_ip_address_allocation = "dynamic"
+        public_ip_address_id          = "${azurerm_public_ip.test.id}"
+    }
+}
+
+resource "azurerm_storage_account" "test" {
+	name                     = "accsa%d"
+	resource_group_name      = "${azurerm_resource_group.test.name}"
+	location                 = "${azurerm_resource_group.test.location}"
+	account_tier             = "Premium"
+	account_replication_type = "LRS"
+
+    tags {
+        environment = "staging"
+    }
+}
+
+resource "azurerm_virtual_machine" "test" {
+    name                  = "acctvm"
+    location              = "${azurerm_resource_group.test.location}"
+    resource_group_name   = "${azurerm_resource_group.test.name}"
+    network_interface_ids = ["${azurerm_network_interface.test.id}"]
+    vm_size               = "Standard_DS2_v2"
+
+    storage_image_reference {
+		publisher = "Canonical"
+		offer     = "UbuntuServer"
+		sku       = "16.04-LTS"
+		version   = "latest"
+    }
+
+    storage_os_disk {
+        name              = "myosdisk1"
+        caching           = "ReadWrite"
+        create_option     = "FromImage"
+        managed_disk_type = "Premium_LRS"
+    }
+
+    os_profile {
+		computer_name  = "computername"
+		admin_username = "testadmin"
+    }
+
+    os_profile_linux_config {
+		disable_password_authentication = true
+		ssh_keys {
+            path     = "/home/testadmin/.ssh/authorized_keys"
             key_data = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCfGyt5W1eJVpDIxlyvAWO594j/azEGohmlxYe7mgSfmUCWjuzILI6nHuHbxhpBDIZJhQ+JAeduXpii61dmThbI89ghGMhzea0OlT3p12e093zqa4goB9g40jdNKmJArER3pMVqs6hmv8y3GlUNkMDSmuoyI8AYzX4n26cUKZbwXQ== mk@mk3"
         }
     }
