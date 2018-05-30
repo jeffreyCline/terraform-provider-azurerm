@@ -50,7 +50,8 @@ resource "azurerm_storage_account" "test" {
 
   location = "${azurerm_resource_group.test.location}"
   account_tier = "Standard"
-  account_replication_type = "LRS"
+	account_replication_type = "LRS"
+	account_kind = "BlobStorage"
 
   tags {
     environment = "production"
