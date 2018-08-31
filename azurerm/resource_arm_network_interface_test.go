@@ -515,7 +515,7 @@ resource "azurerm_network_interface" "test" {
 func testAccAzureRMNetworkInterface_basicWithNetworkSecurityGroup(rInt int, location string) string {
 	return fmt.Sprintf(`
 resource "azurerm_resource_group" "test" {
-  name     = "acctest-rg-%d"
+  name     = "perfTest-RG-%d"
   location = "%s"
 }
 
